@@ -1,0 +1,111 @@
+#!/bin/bash
+export PATH="/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin"
+
+
+# automatically change configuration of Mac OS X based on location
+# author: Rocco Georgi <rocco@pavingways.com>
+# version: 0.4.0
+
+# original author: Onne Gorter <o.gorter@gmail.com>
+# url: http://tech.inhelsinki.nl/locationchanger/
+# version: 0.4
+
+# redirect all IO to a logfile
+mkdir -p /usr/local/var/log
+exec &>/usr/local/var/log/locationchanger.log
+# redirect all IO to /dev/null (comment this in if you don#t want to write to logfile)
+#exec 1>/dev/null 2>/dev/null
+
+# get a little breather before we get data for things to settle down
+sleep 2
+
+
+# get SSID
+SSID=`/System/Library/PrivateFrameworks/Apple80211.framework/Versions/A/Resources/airport -I | awk '/ SSID:/ {print $2}'`
+echo `date` "New SSID found: $SSID"
+
+# empty location var
+LOCATION=
+
+# LOCATIONS
+# (use to be used Location name here)
+# =============================================
+Location_Standard="Automatic"
+Location_Adblocker="Adblocker@Home"
+
+# Adblocker DNS
+# =============================================
+Location_Adblocker_DNS="192.168.0.14"
+
+# SSIDS
+# =====
+SSID_Adblocker=buddy
+SSID_TelekomPublic=no
+
+# SSID -> LOCATION mapping
+case $SSID in
+	$SSID_Adblocker          ) LOCATION="$Location_Adblocker";;
+	# ... add more here
+esac
+	REASON="SSID changed to $SSID"
+
+# still didn't get a location -> use Location_Automatic
+if [ -z "$LOCATION" ]; then
+	LOCATION="$Location_Standard"
+	REASON="Automatic Fallback"
+fi
+
+# Don't change if we're already there
+current_location=$(networksetup -getcurrentlocation)
+if [ "$current_location" = "$LOCATION" ]; then
+	echo `date` "Don't change - we're already there: $SSID / $LOCATION"
+	exit 0
+fi
+
+Location_created=`networksetup -listlocations | grep -c "^$LOCATION$"`
+if [ "$Location_created" -eq "0" ]; then
+	echo `date` "Creating now the new Location: $LOCATION"
+	networksetup -createlocation $LOCATION populate
+fi
+
+# change network location
+scselect "$LOCATION"
+networksetup -switchtolocation "$LOCATION"
+ExitCode="$?"
+if [ "$ExitCode" -ne "0" ]; then
+#	osascript -e 'display notification "Failed to Update Network Location" with title "Network Location Failure"'
+	echo "Failed to Update Network Location ($LOCATION)"
+	exit 1
+fi
+
+if [ "$LOCATION" = "$Location_Adblocker" ]; then
+	nslookup -timeout=2 -type=A google.com $Location_Adblocker_DNS | grep -c "time out"
+	DNS_Found=`nslookup -timeout=5 -type=A google.com $Location_Adblocker_DNS | grep -c "time out"`
+	if [ "$DNS_Found" -eq "0" ]; then
+		echo `date` "Setting DNS to: $Location_Adblocker_DNS"
+		networksetup -setdnsservers Wi-Fi "$Location_Adblocker_DNS"
+	else
+		echo `date` "Setting DNS to: DHCP DEFAULT"
+		networksetup -setdnsservers Wi-Fi empty
+	fi
+fi
+
+# case $LOCATION in
+# 	$Location_Automatic )
+# 		osascript -e 'display notification "Network Location Changed to Automatic" with title "Network Location Changed"'
+# 	;;
+# 	$Location_Work )
+# 		osascript -e 'display notification "Network Location Changed to Work" with title "Network Location Changed"'
+# 	;;
+# 	$Location_Garten )
+# 		osascript -e 'display notification "Network Location Changed to Garten" with title "Network Location Changed"'
+# 	;;
+# 	$SSID_Adblocker )
+# 		osascript -e 'display notification "Network Location Changed to Adblocker" with title "Network Location Changed"'
+# 	;;
+# 	# ... add more here
+# esac
+
+echo "--> Location Changer: $LOCATION - $REASON"
+
+exit 0
