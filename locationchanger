@@ -35,7 +35,7 @@ Location_Adblocker="Adblocker@Home"
 
 # Adblocker DNS
 # =============================================
-Location_Adblocker_DNS="192.168.0.14"
+Location_Adblocker_DNS="192.168.0.2"
 
 # SSIDS
 # =====
